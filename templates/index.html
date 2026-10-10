@@ -1,0 +1,659 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rave or rant? | IMDB Sentiment App</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;600;700&display=swap"
+        rel="stylesheet" />
+    <style>
+        :root {
+            --ink: #2e2a4a;
+            --muted: #655d85;
+            --paper: #ffffff;
+            --line: #ddd5f3;
+            --lavender: #e4dcff;
+            --accent: #7c6bd6;
+            --rose: #ffd3e1;
+            --rose-edge: #f4b5c9;
+            --butter: #ffefb8;
+            --butter-edge: #ecd47e;
+            --mint: #cdf3e8;
+            --mint-edge: #9fdcc9;
+            --display: "Bricolage Grotesque", "Trebuchet MS", Arial, sans-serif;
+            --body: "Figtree", "Segoe UI", Arial, sans-serif;
+        }
+
+        * { box-sizing: border-box; }
+
+        html, body { margin: 0; min-height: 100%; }
+
+        body {
+            font-family: var(--body);
+            color: var(--ink);
+            background: #ece6ff;
+            line-height: 1.5;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* Background layers: the page mood shifts gently with the prediction */
+        .bg {
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            opacity: 0;
+            transition: opacity 0.8s ease;
+        }
+        .bg.neutral {
+            opacity: 1;
+            background:
+                radial-gradient(circle at 12% 18%, #ffd9e8 0, transparent 40%),
+                radial-gradient(circle at 88% 12%, #fff3c9 0, transparent 36%),
+                radial-gradient(circle at 80% 90%, #d2f4ea 0, transparent 42%),
+                #ece6ff;
+        }
+        .bg.pos {
+            background:
+                radial-gradient(circle at 15% 15%, #fff3c9 0, transparent 44%),
+                radial-gradient(circle at 90% 85%, #ffe6d2 0, transparent 40%),
+                #d2f4ea;
+        }
+        .bg.neg {
+            background:
+                radial-gradient(circle at 15% 85%, #e4dcff 0, transparent 44%),
+                radial-gradient(circle at 90% 10%, #ffe6d6 0, transparent 36%),
+                #ffd9e6;
+        }
+        body[data-mood="pos"] .bg.neutral,
+        body[data-mood="neg"] .bg.neutral { opacity: 0; }
+        body[data-mood="pos"] .bg.pos { opacity: 1; }
+        body[data-mood="neg"] .bg.neg { opacity: 1; }
+
+        .container {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 40px 16px 64px;
+        }
+
+        header { margin-bottom: 26px; }
+
+        header h1 {
+            font-family: var(--display);
+            font-weight: 800;
+            font-size: clamp(2rem, 6vw, 3.2rem);
+            line-height: 1.05;
+            margin: 0 0 10px;
+            letter-spacing: -0.02em;
+        }
+
+        header p {
+            margin: 0;
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: var(--muted);
+            max-width: 52ch;
+        }
+
+        .card {
+            background: var(--paper);
+            border: 2px solid var(--line);
+            border-radius: 24px;
+            box-shadow: 0 14px 40px rgba(124, 107, 214, 0.14);
+            padding: 24px;
+        }
+
+        .examples {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .examples span { font-weight: 700; font-size: 0.95rem; margin-right: 2px; }
+
+        .chip {
+            font: 700 0.9rem var(--body);
+            color: var(--ink);
+            border: 2px solid transparent;
+            border-radius: 999px;
+            padding: 6px 14px;
+            cursor: pointer;
+            transition: transform 0.12s ease, box-shadow 0.12s ease;
+        }
+        .chip:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(46, 42, 74, 0.12); }
+        .chip:active { transform: translateY(0); box-shadow: none; }
+        .chip.love { background: var(--mint); border-color: var(--mint-edge); }
+        .chip.hate { background: var(--rose); border-color: var(--rose-edge); }
+        .chip.meh { background: var(--butter); border-color: var(--butter-edge); }
+
+        .field { position: relative; }
+
+        textarea {
+            width: 100%;
+            min-height: 160px;
+            padding: 14px 16px;
+            font: 400 1rem/1.55 var(--body);
+            color: var(--ink);
+            background: #fcfbff;
+            border: 2px solid var(--line);
+            border-radius: 16px;
+            resize: vertical;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px rgba(124, 107, 214, 0.18); }
+        textarea::placeholder { color: #9a92b8; }
+
+        .meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+            font-size: 0.88rem;
+            color: var(--muted);
+            font-weight: 600;
+        }
+
+        .actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 16px;
+        }
+
+        .btn {
+            font: 800 1rem var(--body);
+            color: var(--ink);
+            border: 2px solid transparent;
+            border-radius: 14px;
+            padding: 12px 22px;
+            cursor: pointer;
+            transition: transform 0.12s ease, box-shadow 0.12s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .btn.primary { background: var(--butter); border-color: var(--butter-edge); box-shadow: 0 4px 0 var(--butter-edge); }
+        .btn.ghost { background: #fff; border-color: var(--line); box-shadow: 0 4px 0 var(--line); }
+        .btn:hover:not(:disabled) { transform: translateY(-1px); }
+        .btn:active:not(:disabled) { transform: translateY(4px); box-shadow: 0 0 0 transparent; }
+        .btn:disabled { opacity: 0.75; cursor: progress; }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 3px solid var(--ink);
+            border-right-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            display: none;
+        }
+        .btn.loading .spinner { display: inline-block; }
+
+        :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+
+        .error {
+            margin-top: 16px;
+            padding: 12px 14px;
+            border: 2px solid var(--rose-edge);
+            border-radius: 14px;
+            background: #ffeef3;
+            font-weight: 700;
+        }
+
+        /* Result */
+        .result {
+            margin-top: 24px;
+            padding: 20px;
+            border: 2px solid transparent;
+            border-radius: 20px;
+            animation: pop 0.45s cubic-bezier(0.2, 1.4, 0.4, 1);
+        }
+        .result.pos { background: #e6faf4; border-color: var(--mint-edge); }
+        .result.neg { background: #ffedf3; border-color: var(--rose-edge); }
+
+        .result-top { display: flex; align-items: center; gap: 16px; }
+
+        .face {
+            font-size: 3.4rem;
+            line-height: 1;
+            animation: wiggle 0.9s ease 0.2s 1;
+        }
+
+        .label {
+            font-family: var(--display);
+            font-weight: 800;
+            font-size: clamp(2rem, 7vw, 2.8rem);
+            line-height: 1;
+            margin: 0;
+            letter-spacing: -0.02em;
+        }
+
+        .tagline { margin: 4px 0 0; font-weight: 600; color: var(--muted); }
+
+        .confidence {
+            margin-left: auto;
+            text-align: right;
+            font-family: var(--display);
+            font-weight: 800;
+            font-size: 2rem;
+            line-height: 1;
+        }
+        .confidence small {
+            display: block;
+            font-family: var(--body);
+            font-weight: 600;
+            font-size: 0.82rem;
+            margin-top: 4px;
+            color: var(--muted);
+        }
+
+        .mood { margin-top: 22px; }
+
+        .track {
+            position: relative;
+            height: 18px;
+            border: 2px solid #fff;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #ffb9cf, #ffefb8 50%, #a9e8d6);
+            box-shadow: 0 0 0 2px var(--line);
+        }
+
+        .marker {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 38px;
+            height: 38px;
+            margin: -19px 0 0 -19px;
+            display: grid;
+            place-items: center;
+            font-size: 1.3rem;
+            background: #fff;
+            border: 2px solid var(--line);
+            border-radius: 50%;
+            box-shadow: 0 4px 10px rgba(46, 42, 74, 0.16);
+            transition: left 0.9s cubic-bezier(0.2, 1.2, 0.3, 1);
+        }
+
+        .scale {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 14px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--muted);
+        }
+
+        /* History */
+        .history { margin-top: 24px; }
+        .history h2 { font-family: var(--display); font-size: 1.15rem; margin: 0 0 10px; }
+        .history ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+
+        .history button {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-align: left;
+            font: 600 0.92rem var(--body);
+            color: var(--ink);
+            background: #fcfbff;
+            border: 2px solid var(--line);
+            border-radius: 12px;
+            padding: 9px 12px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .history button:hover { background: #f4f0ff; }
+        .dot { flex: none; width: 14px; height: 14px; border-radius: 50%; }
+        .dot.pos { background: #86dcc3; }
+        .dot.neg { background: #ff9fbd; }
+        .snippet { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tag { flex: none; font-weight: 800; }
+
+        /* Emoji burst */
+        .burst {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden;
+            z-index: 10;
+        }
+        .burst span {
+            position: absolute;
+            font-size: 2rem;
+            animation: fly 1.9s ease-out forwards;
+        }
+
+        [hidden] { display: none !important; }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pop { from { transform: scale(0.94); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @keyframes wiggle {
+            0%, 100% { transform: rotate(0); }
+            25% { transform: rotate(-14deg) scale(1.15); }
+            75% { transform: rotate(14deg) scale(1.15); }
+        }
+        @keyframes fly {
+            0% { transform: translate(0, 0) rotate(0); opacity: 1; }
+            100% { transform: translate(var(--dx), var(--dy)) rotate(var(--rot)); opacity: 0; }
+        }
+
+        @media (max-width: 520px) {
+            .card { padding: 18px; }
+            .result-top { flex-wrap: wrap; }
+            .confidence { margin-left: 0; text-align: left; width: 100%; }
+            .actions .btn { flex: 1; justify-content: center; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation: none !important; transition: none !important; }
+            .burst { display: none; }
+        }
+    </style>
+</head>
+
+<body data-mood="neutral">
+    <div class="bg neutral"></div>
+    <div class="bg pos"></div>
+    <div class="bg neg"></div>
+    <div class="burst" id="burst" aria-hidden="true"></div>
+
+    <div class="container">
+        <header>
+            <h1>Rave or rant?</h1>
+            <p>Paste a movie review and the model will tell you whether it's positive or negative.</p>
+        </header>
+
+        <main class="card">
+            <div class="examples">
+                <span>Try an example:</span>
+                <button type="button" class="chip love" data-sample="love">A glowing review</button>
+                <button type="button" class="chip hate" data-sample="hate">A scathing review</button>
+                <button type="button" class="chip meh" data-sample="meh">A mixed review</button>
+            </div>
+
+            <div class="field">
+                <label for="review" style="position:absolute;left:-9999px">Movie review</label>
+                <textarea id="review" placeholder="Paste or type a movie review here..."></textarea>
+            </div>
+
+            <div class="meta">
+                <span id="counter">0 words</span>
+                <span>Press Ctrl + Enter (Cmd + Enter on Mac) to analyze</span>
+            </div>
+
+            <div class="actions">
+                <button id="submitBtn" type="button" class="btn primary">
+                    <span class="spinner" aria-hidden="true"></span>
+                    <span id="btnText">Analyze review</span>
+                </button>
+                <button id="clearBtn" type="button" class="btn ghost">Clear</button>
+            </div>
+
+            <div id="error" class="error" role="alert" hidden></div>
+
+            <section id="result" class="result" aria-live="polite" hidden>
+                <div class="result-top">
+                    <div class="face" id="face"></div>
+                    <div>
+                        <p class="label" id="label"></p>
+                        <p class="tagline" id="tagline"></p>
+                    </div>
+                    <div class="confidence">
+                        <span id="confValue"></span>
+                        <small id="confNote"></small>
+                    </div>
+                </div>
+                <div class="mood">
+                    <div class="track">
+                        <div class="marker" id="marker">🎬</div>
+                    </div>
+                    <div class="scale"><span>Negative</span><span>Positive</span></div>
+                </div>
+            </section>
+
+            <section class="history" id="history" hidden>
+                <h2>Recent reviews</h2>
+                <ul id="historyList"></ul>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const API_URL = '/predict';
+
+        const submitBtn = document.getElementById('submitBtn');
+        const btnText = document.getElementById('btnText');
+        const clearBtn = document.getElementById('clearBtn');
+        const reviewEl = document.getElementById('review');
+        const counterEl = document.getElementById('counter');
+        const errorEl = document.getElementById('error');
+        const resultEl = document.getElementById('result');
+        const faceEl = document.getElementById('face');
+        const labelEl = document.getElementById('label');
+        const taglineEl = document.getElementById('tagline');
+        const confValueEl = document.getElementById('confValue');
+        const confNoteEl = document.getElementById('confNote');
+        const markerEl = document.getElementById('marker');
+        const historyEl = document.getElementById('history');
+        const historyList = document.getElementById('historyList');
+        const burstEl = document.getElementById('burst');
+
+        const SAMPLES = {
+            love: "An absolute masterpiece. The performances are moving, the story kept me hooked from the first scene to the last, and the soundtrack is unforgettable. I would happily watch it again tonight.",
+            hate: "A complete waste of two hours. The plot makes no sense, the acting is wooden, and the dialogue made me cringe. I wanted to walk out halfway through.",
+            meh: "The visuals are stunning and the lead actor is great, but the second half drags and the ending feels rushed. It has good moments, though it never quite comes together."
+        };
+
+        const history = [];
+
+        function updateCounter() {
+            const text = reviewEl.value.trim();
+            const words = text ? text.split(/\s+/).length : 0;
+            counterEl.textContent = `${words} ${words === 1 ? 'word' : 'words'} · ${reviewEl.value.length} characters`;
+        }
+
+        function showError(message) {
+            errorEl.textContent = message;
+            errorEl.hidden = false;
+        }
+
+        function hideError() {
+            errorEl.hidden = true;
+        }
+
+        function setLoading(isLoading) {
+            submitBtn.disabled = isLoading;
+            submitBtn.classList.toggle('loading', isLoading);
+            btnText.textContent = isLoading ? 'Analyzing...' : 'Analyze review';
+        }
+
+        function parseConfidence(value) {
+            if (value === null || value === undefined || value === '') return null;
+            const n = Number(String(value).replace('%', ''));
+            return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : null;
+        }
+
+        function animateNumber(el, target) {
+            const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (reduce) { el.textContent = `${target}%`; return; }
+            const start = performance.now();
+            const duration = 800;
+            function frame(now) {
+                const t = Math.min(1, (now - start) / duration);
+                const eased = 1 - Math.pow(1 - t, 3);
+                el.textContent = `${(target * eased).toFixed(target % 1 ? 1 : 0)}%`;
+                if (t < 1) requestAnimationFrame(frame);
+                else el.textContent = `${target}%`;
+            }
+            requestAnimationFrame(frame);
+        }
+
+        function burst(emoji) {
+            burstEl.innerHTML = '';
+            const originX = window.innerWidth / 2;
+            const originY = Math.min(window.innerHeight * 0.6, 420);
+            for (let i = 0; i < 18; i++) {
+                const s = document.createElement('span');
+                s.textContent = emoji;
+                s.style.left = `${originX}px`;
+                s.style.top = `${originY}px`;
+                s.style.setProperty('--dx', `${(Math.random() - 0.5) * 520}px`);
+                s.style.setProperty('--dy', `${-120 - Math.random() * 300}px`);
+                s.style.setProperty('--rot', `${(Math.random() - 0.5) * 540}deg`);
+                s.style.animationDelay = `${Math.random() * 0.15}s`;
+                burstEl.appendChild(s);
+            }
+            setTimeout(() => { burstEl.innerHTML = ''; }, 2200);
+        }
+
+        function showResult(label, confidence) {
+            const isPositive = /^pos/i.test(label);
+            const mood = isPositive ? 'pos' : 'neg';
+
+            document.body.dataset.mood = mood;
+            resultEl.className = `result ${mood}`;
+            // Re-trigger the pop animation
+            resultEl.hidden = true;
+            void resultEl.offsetWidth;
+            resultEl.hidden = false;
+
+            faceEl.textContent = isPositive ? '😍' : '🤮';
+            labelEl.textContent = isPositive ? 'Positive' : 'Negative';
+            taglineEl.textContent = isPositive
+                ? 'This reviewer left the cinema happy.'
+                : 'This reviewer did not enjoy the movie.';
+
+            if (confidence === null) {
+                confValueEl.textContent = 'N/A';
+                confNoteEl.textContent = 'Confidence not available';
+            } else {
+                animateNumber(confValueEl, confidence);
+                confNoteEl.textContent = 'model confidence';
+            }
+
+            // Marker position: where the review sits between negative and positive
+            const positiveShare = confidence === null ? (isPositive ? 88 : 12) : (isPositive ? confidence : 100 - confidence);
+            const pos = Math.max(6, Math.min(94, positiveShare));
+            markerEl.style.left = '50%';
+            markerEl.textContent = isPositive ? '👍' : '👎';
+            requestAnimationFrame(() => requestAnimationFrame(() => { markerEl.style.left = `${pos}%`; }));
+
+            burst(isPositive ? '🎉' : '🍅');
+        }
+
+        function addHistory(text, label, confidence) {
+            const isPositive = /^pos/i.test(label);
+            history.unshift({ text, isPositive, confidence });
+            if (history.length > 5) history.pop();
+            renderHistory();
+        }
+
+        function renderHistory() {
+            historyList.innerHTML = '';
+            history.forEach(item => {
+                const li = document.createElement('li');
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.title = 'Load this review again';
+
+                const dot = document.createElement('span');
+                dot.className = `dot ${item.isPositive ? 'pos' : 'neg'}`;
+
+                const snippet = document.createElement('span');
+                snippet.className = 'snippet';
+                snippet.textContent = item.text;
+
+                const tag = document.createElement('span');
+                tag.className = 'tag';
+                tag.textContent = `${item.isPositive ? 'Positive' : 'Negative'}${item.confidence === null ? '' : ' · ' + item.confidence + '%'}`;
+
+                btn.append(dot, snippet, tag);
+                btn.addEventListener('click', () => {
+                    reviewEl.value = item.text;
+                    updateCounter();
+                    reviewEl.focus();
+                });
+                li.appendChild(btn);
+                historyList.appendChild(li);
+            });
+            historyEl.hidden = history.length === 0;
+        }
+
+        async function analyze() {
+            const text = (reviewEl.value || '').trim();
+            hideError();
+
+            if (!text) {
+                showError('Write or paste a review first, then select Analyze review.');
+                reviewEl.focus();
+                return;
+            }
+
+            setLoading(true);
+
+            try {
+                const resp = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ review: text })
+                });
+
+                const data = await resp.json();
+
+                if (!resp.ok) {
+                    showError(data.error || 'The model could not analyze this review. Try again.');
+                    return;
+                }
+
+                const confidence = parseConfidence(data.confidence);
+                showResult(String(data.label || ''), confidence);
+                addHistory(text, String(data.label || ''), confidence);
+            } catch (e) {
+                showError('Could not reach the server. Check that the app is running, then try again.');
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function clearAll() {
+            reviewEl.value = '';
+            updateCounter();
+            hideError();
+            resultEl.hidden = true;
+            document.body.dataset.mood = 'neutral';
+            reviewEl.focus();
+        }
+
+        submitBtn.addEventListener('click', analyze);
+        clearBtn.addEventListener('click', clearAll);
+        reviewEl.addEventListener('input', updateCounter);
+        reviewEl.addEventListener('keydown', e => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                analyze();
+            }
+        });
+
+        document.querySelectorAll('.chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                reviewEl.value = SAMPLES[chip.dataset.sample];
+                updateCounter();
+                hideError();
+                reviewEl.focus();
+            });
+        });
+
+        updateCounter();
+    </script>
+</body>
+
+</html>
